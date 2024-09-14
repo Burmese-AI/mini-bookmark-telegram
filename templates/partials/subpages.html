@@ -1,0 +1,7 @@
+{% if result.get('subpages') %}
+    <h3>Subpages:</h3>
+    {% for subpage in result['subpages'] %}
+        <h4>{{ subpage['title'] }}</h4>
+        <p>{{ subpage['content'] }}</p>
+    {% endfor %}
+{% endif %}

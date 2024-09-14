@@ -1,0 +1,15 @@
+{% if result.get('metadata') %}
+    {% if result['metadata'].get('author') %}
+        <p>
+            Author: 
+            {% if result['metadata']['author'].get('url') %}
+                <a href="{{ result['metadata']['author']['url'] }}" target="_blank">{{ result['metadata']['author']['name'] }}</a>
+            {% else %}
+                {{ result['metadata']['author']['name'] }}
+            {% endif %}
+        </p>
+    {% endif %}
+    {% if result['metadata'].get('publication_date') %}
+        <p>Publication Date: {{ result['metadata']['publication_date'] }}</p>
+    {% endif %}
+{% endif %}

@@ -1,0 +1,3 @@
+<pre>{% for pre_item in item['text'] %}{% if pre_item['tag'] == 'span' %}{% for span_item in pre_item['content'] %}{% if span_item['tag'] == None %}{{ span_item['text'] }}{% elif span_item['tag'] == 'br' %}
+{% else %}<{{ span_item['tag'] }}>{{ span_item['text'] }}</{{ span_item['tag'] }}>{% endif %}{% endfor %}{% elif pre_item['tag'] == None %}{{ pre_item['text'] }}{% elif pre_item['tag'] == 'br' %}
+{% else %}<{{ pre_item['tag'] }}>{{ pre_item['text'] }}</{{ pre_item['tag'] }}>{% endif %}{% endfor %}</pre>

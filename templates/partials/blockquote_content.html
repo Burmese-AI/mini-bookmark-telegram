@@ -1,0 +1,25 @@
+<blockquote>
+    {% for blockquote_item in item['text'] %}
+        {% if blockquote_item['tag'] == 'p' %}
+            <p>
+                {% for p_item in blockquote_item['text'] %}
+                    {% if p_item['tag'] == None %}
+                        {{ p_item['text'] }}
+                    {% elif p_item['tag'] == 'a' %}
+                        <a href="{{ p_item['href'] }}" target="_blank">{{ p_item['text'] }}</a>
+                    {% elif p_item['tag'] == 'strong' %}
+                        <strong>{{ p_item['text'] }}</strong>
+                    {% else %}
+                        <{{ p_item['tag'] }}>{{ p_item['text'] }}</{{ p_item['tag'] }}>
+                    {% endif %}
+                {% endfor %}
+            </p>
+        {% elif blockquote_item['tag'] == 'strong' %}
+            <strong>{{ blockquote_item['text'] }}</strong>
+        {% elif blockquote_item['tag'] == None %}
+            {{ blockquote_item['text'] }}
+        {% else %}
+            <{{ blockquote_item['tag'] }}>{{ blockquote_item['text'] }}</{{ blockquote_item['tag'] }}>
+        {% endif %}
+    {% endfor %}
+</blockquote>

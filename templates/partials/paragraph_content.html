@@ -1,0 +1,13 @@
+<p>
+    {% for p_item in item['text'] %}
+        {% if p_item['tag'] == None %}
+            {{ p_item['text'] }}
+        {% elif p_item['tag'] == 'a' %}
+            <a href="{{ p_item['href'] }}" target="_blank">{{ p_item['text'] }}</a>
+        {% elif p_item['tag'] == 'strong' %}
+            <strong>{{ p_item['text'] }}</strong>
+        {% else %}
+            <{{ p_item['tag'] }}>{{ p_item['text'] }}</{{ p_item['tag'] }}>
+        {% endif %}
+    {% endfor %}
+</p>

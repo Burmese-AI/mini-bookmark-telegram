@@ -1,0 +1,13 @@
+{% for item in result['content'] %}
+    {% if item['tag'] == 'pre' %}
+        {% include 'partials/pre_content.html' %}
+    {% elif item['tag'] == 'blockquote' %}
+        {% include 'partials/blockquote_content.html' %}
+    {% elif item['tag'] in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] %}
+        <{{ item['tag'] }}>{{ item['text'] }}</{{ item['tag'] }}>
+    {% elif item['tag'] == 'p' %}
+        {% include 'partials/paragraph_content.html' %}
+    {% elif item['tag'] in ['ul', 'ol'] %}
+        {% include 'partials/list_content.html' %}
+    {% endif %}
+{% endfor %}
