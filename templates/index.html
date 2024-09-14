@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mini Bookmark</title>
+    <title>URL Parser</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/styles.css') }}"
@@ -11,26 +11,17 @@
   </head>
   <body>
     <div class="container">
-      <h1>Mini Bookmark</h1>
-      <form method="POST">
-        <input type="url" name="url" placeholder="Enter URL" required />
-        <button type="submit">Parse</button>
-      </form>
-
-      {% if error %}
-      <p class="error">{{ error }}</p>
-      {% endif %} {% if result %}
-      <div id="result">
-        <p>Type: {{ result['type'] }}</p>
-        {% include 'partials/metadata.html' %}
-        <hr />
-        {% include 'partials/content.html' %}
-        {% if result['links'] %}
-          <h2>Links</h2>
-          {% include 'partials/links.html' %}
-        {% endif %}
+      <div id="input-container">
+        <form id="url-form">
+          <input type="url" id="url-input" placeholder="Enter URL to parse" required />
+          <button type="submit">Parse</button>
+        </form>
       </div>
-      {% endif %}
+      <div id="loading" style="display: none;">
+        <div class="spinner"></div>
+        <p>Parsing URL...</p>
+      </div>
+      <div id="result" style="display: none;"></div>
     </div>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
   </body>

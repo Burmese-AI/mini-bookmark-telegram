@@ -1,19 +1,32 @@
 import re
-import time
 from typing import Dict, List, Tuple, Optional
 
 import requests
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, jsonify
 from urllib.parse import urljoin
+from ratelimit import limits, sleep_and_retry
 
 app = Flask(__name__)
 
-def fetch_page(url: str) -> BeautifulSoup:
-    """Fetch and parse the HTML content of a given URL."""
-    response = requests.get(url)
-    return BeautifulSoup(response.text, 'html.parser')
+RATE_LIMIT = 5
+CALLS = 1
+
+@sleep_and_retry
+@limits(calls=CALLS, period=RATE_LIMIT)
+def fetch_page(url: str) -> Optional[BeautifulSoup]:
+    """Fetch and parse the HTML content of a given URL with rate limiting."""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status() 
+        return BeautifulSoup(response.text, 'html.parser')
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching {url}: {e}")
+        return None
 
 def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
     """Find the main content area of the page, excluding navigation and sidebar content."""
@@ -38,9 +51,7 @@ def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
 def extract_text_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
     """Extract text content from a tag, considering blockquotes."""
     text = tag.get_text(strip=True)
-    if text and text not in blockquote_text:
-        return {'tag': tag.name, 'text': text}
-    return None
+    return {'tag': tag.name, 'text': text} if text and text not in blockquote_text else None
 
 def extract_link_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], Optional[Dict]]:
     """Extract link content from a tag, considering blockquotes and handling relative URLs."""
@@ -59,9 +70,7 @@ def extract_link_content(tag: BeautifulSoup, blockquote_text: set, base_url: str
 def extract_strong_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
     """Extract strong content from a tag, considering blockquotes."""
     text = tag.get_text(strip=True)
-    if text not in blockquote_text:
-        return {'tag': 'strong', 'text': text}
-    return None
+    return {'tag': 'strong', 'text': text} if text not in blockquote_text else None
 
 def extract_pre_content(tag: BeautifulSoup) -> Dict:
     """Extract pre-formatted content from a tag."""
@@ -107,9 +116,7 @@ def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_ur
             if strong_content:
                 blockquote_content.append(strong_content)
                 blockquote_text.add(strong_content['text'])
-    if blockquote_content:
-        return {'tag': 'blockquote', 'text': blockquote_content}, links
-    return None, links
+    return ({'tag': 'blockquote', 'text': blockquote_content}, links) if blockquote_content else (None, links)
 
 def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url: str, is_blockquote: bool = False) -> Tuple[Optional[Dict], List[Dict]]:
     """Extract paragraph content from a tag."""
@@ -135,9 +142,7 @@ def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url
                 p_content.append(strong_content)
                 if is_blockquote:
                     blockquote_text.add(strong_content['text'])
-    if p_content:
-        return {'tag': 'p', 'text': p_content}, links
-    return None, links
+    return ({'tag': 'p', 'text': p_content}, links) if p_content else (None, links)
 
 def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], List[Dict]]:
     """Extract content from the BeautifulSoup object."""
@@ -146,6 +151,10 @@ def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], Lis
     blockquote_text = set()
     main_content = find_main_content(soup)
     
+    if main_content is None:
+        # If we can't find the main content, use the whole body
+        main_content = soup.body or soup
+
     for tag in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'pre', 'ul', 'ol', 'blockquote']):
         if tag.name == 'blockquote':
             blockquote_content, blockquote_links = extract_blockquote_content(tag, blockquote_text, base_url)
@@ -220,63 +229,58 @@ def extract_metadata(soup: BeautifulSoup) -> Dict:
         'author': extract_author(soup)
     }
 
-def parse_url(url: str, depth: int = 1) -> Dict:
+def parse_url(url: str) -> Dict:
     """Parse the given URL and extract content, metadata, and links."""
     try:
         soup = fetch_page(url)
+        if soup is None:
+            return {"error": "Failed to fetch the page", "content": []}
+        
         base_url = '/'.join(url.split('/')[:3])
         content_text, additional_links = extract_content(soup, base_url)
         
         if not content_text:
-            return {"error": "No content could be extracted from this page"}
+            return {"error": "No content could be extracted from this page", "content": []}
         
         content_type = classify_content(url, ' '.join([item['text'] for item in content_text if isinstance(item['text'], str)]))
         metadata = extract_metadata(soup)
         
         ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe', 'open in app']
         all_links = soup.find_all('a', href=True)
-        filtered_links = []
-        for a in all_links:
-            link_text = a.get_text(strip=True)
-            href = a.get('href')
-            if link_text and href and not any(term in link_text.lower() for term in ignored_terms):
-                full_url = urljoin(base_url, href)
-                filtered_links.append({'text': link_text, 'href': full_url})
+        filtered_links = [
+            {'text': a.get_text(strip=True), 'href': urljoin(base_url, a['href'])}
+            for a in all_links
+            if a.get_text(strip=True) and not any(term in a.get_text(strip=True).lower() for term in ignored_terms)
+        ]
         
-        for link in additional_links:
-            if link['text'] and link['href'] and not any(term in link['text'].lower() for term in ignored_terms):
-                filtered_links.append(link)
+        filtered_links.extend(additional_links)
         
-        unique_links = []
-        seen = set()
-        for link in filtered_links:
-            if link['href'] not in seen:
-                unique_links.append(link)
-                seen.add(link['href'])
+        unique_links = list({link['href']: link for link in filtered_links}.values())[:10]
         
-        result = {
+        return {
             "content": content_text,
             "type": content_type,
             "metadata": metadata,
-            "links": unique_links[:10]
+            "links": unique_links
         }
-        
-        return result
     except Exception as e:
-        return {"error": f"An error occurred while parsing the URL: {str(e)}"}
+        return {"error": f"An error occurred while parsing the URL: {str(e)}", "content": []}
 
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    """Handle the index route for both GET and POST requests."""
-    if request.method == 'POST':
-        url = request.form.get('url')
-        
-        if not url:
-            return render_template('index.html', error="URL is required")
-        
-        result = parse_url(url)
-        return render_template('index.html', result=result)
+@app.route('/parse', methods=['POST'])
+def parse():
+    url = request.json.get('url')
     
+    if not url:
+        return jsonify({"error": "URL is required", "content": []})
+    
+    try:
+        result = parse_url(url)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e), "content": []})
+
+@app.route('/')
+def index():
     return render_template('index.html')
 
 if __name__ == "__main__":
