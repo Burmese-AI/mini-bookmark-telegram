@@ -50,28 +50,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.type) {
             html += `<p><strong>Type:</strong> ${escapeHtml(data.type)}</p>`;
         }
+        if (data.metadata && data.metadata.author) {
+            const author = data.metadata.author;
+            const authorName = author.name ? escapeHtml(author.name) : null;
+            const authorUrl = author.url || null;
+
+            if (authorName && authorUrl) {
+                html += `<p><strong>Author:</strong> <a href="${escapeHtml(authorUrl)}" target="_blank" class="author-link">${authorName}</a></p>`;
+            }
+        }
         
-        if (data.metadata) {
-            if (data.metadata.author) {
-                let authorText = data.metadata.author;
-                if (typeof authorText === 'object') {
-                    authorText = authorText.name || JSON.stringify(authorText);
-                }
-                html += `<p><strong>Author:</strong> ${escapeHtml(authorText)}</p>`;
-            }
-            if (data.metadata.publication_date) {
-                html += `<p><strong>Publication Date:</strong> ${escapeHtml(data.metadata.publication_date)}</p>`;
-            }
+        if (data.metadata && data.metadata.publication_date) {
+            html += `<p><strong>Publication Date:</strong> ${escapeHtml(data.metadata.publication_date)}</p>`;
         }
         
         html += '</div>';
 
         if (data.content && Array.isArray(data.content)) {
-            // Assuming the first h1 or h2 is the title
             const titleItem = data.content.find(item => item.tag === 'h1' || item.tag === 'h2');
             if (titleItem) {
                 html += `<h1 class="article-title">${escapeHtml(titleItem.text)}</h1>`;
-                // Remove the title from the content array
                 data.content = data.content.filter(item => item !== titleItem);
             }
 
@@ -80,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
             html += '</div>';
         }
 
-        // Add links section
         if (data.links && data.links.length > 0) {
             html += '<div class="article-links">';
             html += '<h3>Related Links:</h3>';

@@ -255,3 +255,16 @@ img {
   color: #3498db;
 }
 
+/* Author link styles */
+.author-link {
+    color: #3498db; /* Link color */
+    text-decoration: none; /* Remove underline */
+    font-weight: 600; /* Bold text */
+    transition: color 0.3s; /* Smooth color transition */
+}
+
+.author-link:hover {
+    color: #2980b9; /* Darker shade on hover */
+    text-decoration: underline; /* Underline on hover */
+}
+

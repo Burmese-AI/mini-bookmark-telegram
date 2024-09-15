@@ -16,20 +16,18 @@ CALLS = 1
 @sleep_and_retry
 @limits(calls=CALLS, period=RATE_LIMIT)
 def fetch_page(url: str) -> Optional[BeautifulSoup]:
-    """Fetch and parse the HTML content of a given URL with rate limiting."""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     try:
         response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status() 
+        response.raise_for_status()
         return BeautifulSoup(response.text, 'html.parser')
     except requests.exceptions.RequestException as e:
         print(f"Error fetching {url}: {e}")
         return None
 
 def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
-    """Find the main content area of the page, excluding navigation and sidebar content."""
     for element in soup.find_all(['nav', 'header', 'footer', 'aside']):
         element.decompose()
 
@@ -49,31 +47,25 @@ def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
     return main_content
 
 def extract_text_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
-    """Extract text content from a tag, considering blockquotes."""
     text = tag.get_text(strip=True)
     return {'tag': tag.name, 'text': text} if text and text not in blockquote_text else None
 
 def extract_link_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], Optional[Dict]]:
-    """Extract link content from a tag, considering blockquotes and handling relative URLs."""
     text = tag.get_text(strip=True)
     ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe']
     
     if text.lower() not in blockquote_text and not any(term in text.lower() for term in ignored_terms):
-        href = tag.get('href')
-        if href:
-            href = urljoin(base_url, href)
+        href = urljoin(base_url, tag.get('href')) if tag.get('href') else None
         content = {'tag': 'a', 'text': text, 'href': href}
         link = {'text': text, 'href': href}
         return content, link
     return None, None
 
 def extract_strong_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
-    """Extract strong content from a tag, considering blockquotes."""
     text = tag.get_text(strip=True)
     return {'tag': 'strong', 'text': text} if text not in blockquote_text else None
 
 def extract_pre_content(tag: BeautifulSoup) -> Dict:
-    """Extract pre-formatted content from a tag."""
     pre_content = []
     for child in tag.children:
         if isinstance(child, str):
@@ -93,16 +85,11 @@ def extract_pre_content(tag: BeautifulSoup) -> Dict:
     return {'tag': 'pre', 'text': pre_content}
 
 def extract_list_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
-    """Extract list content from a tag, considering blockquotes."""
     list_items = [li.get_text(strip=True) for li in tag.find_all('li', recursive=False)
                   if li.get_text(strip=True) and li.get_text(strip=True) not in blockquote_text and not li.find('a')]
-    if list_items:
-        return {'tag': tag.name, 'text': list_items}
-    return None
-
+    return {'tag': tag.name, 'text': list_items} if list_items else None
 
 def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], List[Dict]]:
-    """Extract blockquote content from a tag."""
     blockquote_content = []
     links = []
     for child in tag.children:
@@ -119,7 +106,6 @@ def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_ur
     return ({'tag': 'blockquote', 'text': blockquote_content}, links) if blockquote_content else (None, links)
 
 def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url: str, is_blockquote: bool = False) -> Tuple[Optional[Dict], List[Dict]]:
-    """Extract paragraph content from a tag."""
     p_content = []
     links = []
     for child in tag.children:
@@ -145,11 +131,13 @@ def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url
     return ({'tag': 'p', 'text': p_content}, links) if p_content else (None, links)
 
 def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], List[Dict]]:
-    """Extract content from the BeautifulSoup object."""
     content = []
     links = []
     blockquote_text = set()
-    main_content = find_main_content(soup)
+    main_content = find_main_content(soup) or soup.body or soup
+
+    for tag in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'pre', 'ul', 'ol', 'blockquote']):
+        main_content = find_main_content(soup)
     
     if main_content is None:
         # If we can't find the main content, use the whole body
@@ -214,13 +202,15 @@ def extract_author(soup: BeautifulSoup) -> Optional[Dict]:
     author_meta = soup.find('meta', attrs={'name': 'author'})
     author_url_meta = soup.find('meta', attrs={'property': 'article:author'})
     
-    if author_meta and author_url_meta:
-        return {'name': author_meta['content'], 'url': author_url_meta['content']}
-    elif author_meta:
-        return {'name': author_meta['content']}
-    elif author_url_meta:
-        return {'url': author_url_meta['content']}
-    return None
+    author_info = {}
+    
+    if author_meta:
+        author_info['name'] = author_meta['content']
+    
+    if author_url_meta:
+        author_info['url'] = author_url_meta['content']
+    
+    return author_info if author_info else None
 
 def extract_metadata(soup: BeautifulSoup) -> Dict:
     """Extract metadata from the BeautifulSoup object."""
