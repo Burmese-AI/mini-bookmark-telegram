@@ -1,11 +1,11 @@
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
-from flask import Flask, request, render_template, jsonify
-from urllib.parse import urljoin
+from flask import Flask, jsonify, render_template, request
 from ratelimit import limits, sleep_and_retry
 
 app = Flask(__name__)
@@ -53,7 +53,7 @@ def extract_text_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[D
 def extract_link_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], Optional[Dict]]:
     text = tag.get_text(strip=True)
     ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe']
-    
+
     if text.lower() not in blockquote_text and not any(term in text.lower() for term in ignored_terms):
         href = urljoin(base_url, tag.get('href')) if tag.get('href') else None
         content = {'tag': 'a', 'text': text, 'href': href}
@@ -137,13 +137,6 @@ def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], Lis
     main_content = find_main_content(soup) or soup.body or soup
 
     for tag in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'pre', 'ul', 'ol', 'blockquote']):
-        main_content = find_main_content(soup)
-    
-    if main_content is None:
-        # If we can't find the main content, use the whole body
-        main_content = soup.body or soup
-
-    for tag in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'pre', 'ul', 'ol', 'blockquote']):
         if tag.name == 'blockquote':
             blockquote_content, blockquote_links = extract_blockquote_content(tag, blockquote_text, base_url)
             if blockquote_content:
@@ -164,7 +157,7 @@ def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], Lis
             list_content = extract_list_content(tag, blockquote_text)
             if list_content:
                 content.append(list_content)
-    
+
     return content, links
 
 def classify_content(url: str, content: str) -> str:
@@ -184,7 +177,7 @@ def extract_date(soup: BeautifulSoup) -> Optional[str]:
         r'\d{4}-\d{2}-\d{2}',
         r'\d{2}/\d{2}/\d{4}',
     ]
-    
+
     for pattern in date_patterns:
         match = re.search(pattern, text)
         if match:
@@ -201,15 +194,15 @@ def extract_author(soup: BeautifulSoup) -> Optional[Dict]:
     """Extract the author information from the BeautifulSoup object."""
     author_meta = soup.find('meta', attrs={'name': 'author'})
     author_url_meta = soup.find('meta', attrs={'property': 'article:author'})
-    
+
     author_info = {}
-    
+
     if author_meta:
         author_info['name'] = author_meta['content']
-    
+
     if author_url_meta:
         author_info['url'] = author_url_meta['content']
-    
+
     return author_info if author_info else None
 
 def extract_metadata(soup: BeautifulSoup) -> Dict:
@@ -225,16 +218,16 @@ def parse_url(url: str) -> Dict:
         soup = fetch_page(url)
         if soup is None:
             return {"error": "Failed to fetch the page", "content": []}
-        
+
         base_url = '/'.join(url.split('/')[:3])
         content_text, additional_links = extract_content(soup, base_url)
-        
+
         if not content_text:
             return {"error": "No content could be extracted from this page", "content": []}
-        
+
         content_type = classify_content(url, ' '.join([item['text'] for item in content_text if isinstance(item['text'], str)]))
         metadata = extract_metadata(soup)
-        
+
         ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe', 'open in app']
         all_links = soup.find_all('a', href=True)
         filtered_links = [
@@ -242,11 +235,11 @@ def parse_url(url: str) -> Dict:
             for a in all_links
             if a.get_text(strip=True) and not any(term in a.get_text(strip=True).lower() for term in ignored_terms)
         ]
-        
+
         filtered_links.extend(additional_links)
-        
+
         unique_links = list({link['href']: link for link in filtered_links}.values())[:10]
-        
+
         return {
             "content": content_text,
             "type": content_type,
@@ -259,10 +252,10 @@ def parse_url(url: str) -> Dict:
 @app.route('/parse', methods=['POST'])
 def parse():
     url = request.json.get('url')
-    
+
     if not url:
         return jsonify({"error": "URL is required", "content": []})
-    
+
     try:
         result = parse_url(url)
         return jsonify(result)

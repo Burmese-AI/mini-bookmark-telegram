@@ -1,7 +1,8 @@
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, WebAppInfo
-from telegram.ext import ApplicationBuilder, CallbackContext, CommandHandler, MessageHandler, filters
-from credentials import BOT_TOKEN, BOT_USERNAME
-import json
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CallbackContext, CommandHandler
+
+from credentials import BOT_TOKEN
+
 
 async def launch_web_ui(update: Update, context: CallbackContext) -> None:
     await update.effective_chat.send_message("Let's do this!")

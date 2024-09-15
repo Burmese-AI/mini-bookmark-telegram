@@ -99,39 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
         resultDiv.innerHTML = html;
     }
 
-    function filterContent(content, linkTexts) {
-        console.log("Filtering content:", JSON.stringify(content, null, 2));
-        console.log("Link texts:", linkTexts);
-
-        return content.filter(item => {
-            if (typeof item.text === 'string') {
-                const itemText = item.text.toLowerCase();
-                const shouldKeep = !linkTexts.some(linkText => 
-                    itemText.includes(linkText) || 
-                    linkText.includes(itemText) ||
-                    itemText.length > 10 && linkText.length > 10 && 
-                    (itemText.substring(0, 10) === linkText.substring(0, 10))
-                );
-                console.log(`Checking item: ${itemText}, Keep: ${shouldKeep}`);
-                return shouldKeep;
-            } else if (Array.isArray(item.text)) {
-                item.text = filterContent(item.text, linkTexts);
-                return item.text.length > 0;
-            } else if (item.text && typeof item.text === 'object') {
-                const itemText = item.text.text.toLowerCase();
-                const shouldKeep = !linkTexts.some(linkText => 
-                    itemText.includes(linkText) || 
-                    linkText.includes(itemText) ||
-                    itemText.length > 10 && linkText.length > 10 && 
-                    (itemText.substring(0, 10) === linkText.substring(0, 10))
-                );
-                console.log(`Checking item: ${itemText}, Keep: ${shouldKeep}`);
-                return shouldKeep;
-            }
-            return true;
-        });
-    }
-
     function renderContent(content) {
         if (!Array.isArray(content)) {
             console.error('Content is not an array:', content);
