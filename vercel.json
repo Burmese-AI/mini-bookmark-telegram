@@ -12,6 +12,10 @@
         "dest": "parser.py"
       },
       {
+        "src": "/static/(.*)",
+        "dest": "/static/$1"
+      },
+      {
         "src": "/",
         "dest": "parser.py"
       }
