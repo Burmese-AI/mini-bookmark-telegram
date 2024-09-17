@@ -8,7 +8,7 @@ from dateutil import parser as date_parser
 from flask import Flask, jsonify, render_template, request
 from ratelimit import limits, sleep_and_retry
 
-app = Flask(__name__, static_url_path='/static')
+app = Flask(__name__)
 
 RATE_LIMIT = 5
 CALLS = 1
