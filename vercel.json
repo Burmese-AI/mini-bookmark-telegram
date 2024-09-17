@@ -1,23 +1,19 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "parser.py",
-        "use": "@vercel/python"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/parse",
-        "dest": "parser.py"
-      },
-      {
-        "src": "/static/(.*)",
-        "dest": "/static/$1"
-      },
-      {
-        "src": "/",
-        "dest": "parser.py"
-      }
-    ]
-  }
+  "version": 2,
+  "builds": [
+    {
+      "src": "parser.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "static/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "parser.py"
+    }
+  ]
+}
