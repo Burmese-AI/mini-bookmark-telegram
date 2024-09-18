@@ -9,7 +9,7 @@ from dateutil import parser as date_parser
 from flask import Flask, jsonify, render_template, request
 from ratelimit import limits, sleep_and_retry
 
-app = Flask(__name__, static_folder='static', static_url_path='/static')
+app = Flask(__name__)
 
 RATE_LIMIT = 5
 CALLS = 1
@@ -268,5 +268,4 @@ def index():
     return render_template('index.html')
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    app.run(debug=True)
