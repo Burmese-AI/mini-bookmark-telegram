@@ -1,7 +1,6 @@
-import os
 import re
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -131,6 +130,15 @@ def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url
                     blockquote_text.add(strong_content['text'])
     return ({'tag': 'p', 'text': p_content}, links) if p_content else (None, links)
 
+def filter_empty_headings(content: List[Dict]) -> List[Dict]:
+    filtered_content = []
+    for i, item in enumerate(content):
+        if item['tag'].startswith('h'):
+            if i == len(content) - 1 or content[i+1]['tag'].startswith('h'):
+                continue
+        filtered_content.append(item)
+    return filtered_content
+
 def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], List[Dict]]:
     content = []
     links = []
@@ -159,19 +167,33 @@ def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], Lis
             if list_content:
                 content.append(list_content)
 
-    return content, links
+    filtered_content = filter_empty_headings(content)
+    return filtered_content, links
 
-def classify_content(url: str, content: str) -> str:
-    """Classify the content type based on URL and content."""
-    if "recipe" in url or "recipe" in content.lower():
-        return "Recipe"
-    elif "product" in url or "buy" in url:
-        return "Product Page"
-    else:
+def classify_content(url: str, content: str, metadata: dict) -> str:
+    domain = urlparse(url).netloc.lower()
+    path = urlparse(url).path.lower()
+    lower_content = content.lower()[:1000]
+
+    patterns = {
+        "News": (r'\b(breaking news|latest update|press release)\b', ['news', 'bbc', 'cnn', 'nytimes', 'reuters', 'ap']),
+        "Recipe": (r'\b(ingredients|directions|prep time|cook time)\b', ['recipe', 'food', 'cooking']),
+        "Product": (r'\b(add to cart|product details|shipping info)\b', ['product', 'shop', 'store']),
+        "Review": (r'\b(review|rating|stars out of|verdict)\b', ['review']),
+        "Tutorial": (r'\b(step [1-9]|how to|tutorial|guide)\b', ['tutorial', 'how-to']),
+        "Blog Post": (r'\b(posted on|blog post|thoughts on)\b', ['blog'])
+    }
+
+    for content_type, (content_pattern, url_keywords) in patterns.items():
+        if re.search(content_pattern, lower_content) or any(keyword in domain or keyword in path for keyword in url_keywords):
+            return content_type
+
+    if 'medium.com' in domain or metadata.get('author'):
         return "Article"
 
+    return "Article"
+
 def extract_date(soup: BeautifulSoup) -> Optional[str]:
-    """Extract the publication date from the BeautifulSoup object."""
     text = soup.get_text()
     date_patterns = [
         r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b',
@@ -192,29 +214,24 @@ def extract_date(soup: BeautifulSoup) -> Optional[str]:
     return None
 
 def extract_author(soup: BeautifulSoup) -> Optional[Dict]:
-    """Extract the author information from the BeautifulSoup object."""
     author_meta = soup.find('meta', attrs={'name': 'author'})
     author_url_meta = soup.find('meta', attrs={'property': 'article:author'})
 
     author_info = {}
-
     if author_meta:
         author_info['name'] = author_meta['content']
-
     if author_url_meta:
         author_info['url'] = author_url_meta['content']
 
     return author_info if author_info else None
 
 def extract_metadata(soup: BeautifulSoup) -> Dict:
-    """Extract metadata from the BeautifulSoup object."""
     return {
         'publication_date': extract_date(soup),
         'author': extract_author(soup)
     }
 
 def parse_url(url: str) -> Dict:
-    """Parse the given URL and extract content, metadata, and links."""
     try:
         soup = fetch_page(url)
         if soup is None:
@@ -226,8 +243,8 @@ def parse_url(url: str) -> Dict:
         if not content_text:
             return {"error": "No content could be extracted from this page", "content": []}
 
-        content_type = classify_content(url, ' '.join([item['text'] for item in content_text if isinstance(item['text'], str)]))
         metadata = extract_metadata(soup)
+        content_type = classify_content(url, ' '.join([item['text'] for item in content_text if isinstance(item['text'], str)]), metadata)
 
         ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe', 'open in app']
         all_links = soup.find_all('a', href=True)
@@ -238,7 +255,6 @@ def parse_url(url: str) -> Dict:
         ]
 
         filtered_links.extend(additional_links)
-
         unique_links = list({link['href']: link for link in filtered_links}.values())[:10]
 
         return {
@@ -253,10 +269,8 @@ def parse_url(url: str) -> Dict:
 @app.route('/parse', methods=['POST'])
 def parse():
     url = request.json.get('url')
-
     if not url:
         return jsonify({"error": "URL is required", "content": []})
-
     try:
         result = parse_url(url)
         return jsonify(result)
