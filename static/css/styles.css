@@ -405,3 +405,98 @@ pre code {
 .content-footer .action-button {
   margin: 0 10px;
 }
+
+/* Toast notification styles */
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  pointer-events: none;
+  width: 90%;
+  max-width: 300px;
+}
+
+.toast {
+  background: #fff;
+  color: #333;
+  border-radius: 4px;
+  box-shadow: 0 1px 10px 0 rgba(0, 0, 0, 0.1), 0 2px 15px 0 rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  margin-bottom: 1rem;
+  opacity: 0;
+  transform: translateY(-100%);
+  transition: all 0.4s ease;
+  overflow: hidden;
+  pointer-events: auto;
+  text-align: center;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  transform-origin: left;
+  animation: shrink 3s linear forwards;
+}
+
+.toast-success .toast-progress {
+  background-color: #07bc0c;
+}
+
+.toast-error .toast-progress {
+  background-color: #e74c3c;
+}
+
+.toast-remove .toast-progress {
+  background-color: #f39c12;
+}
+
+@keyframes shrink {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 20px;
+  }
+
+  .toast-container {
+    width: 85%;
+    max-width: 280px;
+  }
+
+  .toast {
+    padding: 6px 10px;
+  }
+
+  .toast-message {
+    font-size: 13px;
+  }
+}

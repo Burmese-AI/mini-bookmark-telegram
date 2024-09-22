@@ -290,7 +290,7 @@ def save_content():
 
         save_to_file(saves)
         return jsonify({"message": "Content saved successfully", "id": new_id}), 200
-    except Exception as e:
+    except Exception:
         return jsonify({"error": "An internal server error occurred"}), 500
 
 @app.route('/saves', methods=['GET'])
@@ -352,7 +352,7 @@ def load_saves() -> List[Dict]:
     if not os.path.exists(SAVES_FILE):
         os.makedirs(os.path.dirname(SAVES_FILE), exist_ok=True)
         save_to_file([])
-    with open(SAVES_FILE, 'r') as f:
+    with open(SAVES_FILE) as f:
         return json.load(f)
 
 def save_to_file(saves: List[Dict]):
