@@ -1,3 +1,5 @@
+import json
+import os
 import re
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
@@ -12,10 +14,12 @@ app = Flask(__name__)
 
 RATE_LIMIT = 5
 CALLS = 1
+SAVES_FILE = 'saves.json'
 
 @sleep_and_retry
 @limits(calls=CALLS, period=RATE_LIMIT)
 def fetch_page(url: str) -> Optional[BeautifulSoup]:
+    """Fetch and parse a web page with rate limiting."""
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -23,11 +27,11 @@ def fetch_page(url: str) -> Optional[BeautifulSoup]:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         return BeautifulSoup(response.text, 'html.parser')
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching {url}: {e}")
+    except requests.exceptions.RequestException:
         return None
 
 def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
+    """Identify and extract the main content from a parsed web page."""
     for element in soup.find_all(['nav', 'header', 'footer', 'aside']):
         element.decompose()
 
@@ -266,20 +270,91 @@ def parse_url(url: str) -> Dict:
     except Exception as e:
         return {"error": f"An error occurred while parsing the URL: {str(e)}", "content": []}
 
+@app.route('/save', methods=['POST'])
+def save_content():
+    """Save parsed content to a file."""
+    content = request.json
+    if 'url' not in content:
+        return jsonify({"error": "URL is required"}), 400
+
+    saves = load_saves()
+    existing_save = next((save for save in saves if save.get('url') == content['url']), None)
+
+    if existing_save:
+        return jsonify({"message": "Content already saved", "id": existing_save['id']}), 200
+
+    new_id = max([save.get('id', 0) for save in saves] + [0]) + 1
+    content['id'] = new_id
+    saves.append(content)
+
+    save_to_file(saves)
+    return jsonify({"message": "Content saved successfully", "id": new_id}), 200
+
+@app.route('/saves', methods=['GET'])
+def get_saves():
+    """Retrieve all saved contents."""
+    saves = load_saves()
+    return jsonify(saves), 200
+
+@app.route('/save/<int:id>', methods=['GET'])
+def get_save(id):
+    """Retrieve a specific saved content by ID."""
+    saves = load_saves()
+    save = next((save for save in saves if save['id'] == id), None)
+    if save:
+        return jsonify(save), 200
+    return jsonify({"error": "Save not found"}), 404
+
+@app.route('/remove/<int:id>', methods=['POST'])
+def remove_content(id):
+    """Remove a specific saved content by ID."""
+    try:
+        saves = load_saves()
+        original_length = len(saves)
+        saves = [save for save in saves if save['id'] != id]
+
+        if len(saves) == original_length:
+            return jsonify({"error": f"Content with id {id} not found"}), 404
+
+        save_to_file(saves)
+        return jsonify({"message": "Content removed successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/remove-all', methods=['POST'])
+def remove_all_content():
+    """Remove all saved contents."""
+    save_to_file([])
+    return jsonify({"message": "All content removed successfully"}), 200
+
 @app.route('/parse', methods=['POST'])
 def parse():
+    """Parse a given URL and return its content."""
     url = request.json.get('url')
     if not url:
-        return jsonify({"error": "URL is required", "content": []})
+        return jsonify({"error": "URL is required", "content": []}), 400
     try:
         result = parse_url(url)
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e), "content": []})
+        return jsonify({"error": str(e), "content": []}), 500
 
 @app.route('/')
 def index():
+    """Render the main page."""
     return render_template('index.html')
+
+def load_saves() -> List[Dict]:
+    """Load saved contents from file."""
+    if os.path.exists(SAVES_FILE):
+        with open(SAVES_FILE) as f:
+            return json.load(f)
+    return []
+
+def save_to_file(saves: List[Dict]):
+    """Save contents to file."""
+    with open(SAVES_FILE, 'w') as f:
+        json.dump(saves, f)
 
 if __name__ == "__main__":
     app.run(debug=True)
