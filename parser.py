@@ -273,22 +273,26 @@ def parse_url(url: str) -> Dict:
 @app.route('/save', methods=['POST'])
 def save_content():
     """Save parsed content to a file."""
-    content = request.json
-    if 'url' not in content:
-        return jsonify({"error": "URL is required"}), 400
+    try:
+        content = request.json
+        if 'url' not in content:
+            return jsonify({"error": "URL is required"}), 400
 
-    saves = load_saves()
-    existing_save = next((save for save in saves if save.get('url') == content['url']), None)
+        saves = load_saves()
+        existing_save = next((save for save in saves if save.get('url') == content['url']), None)
 
-    if existing_save:
-        return jsonify({"message": "Content already saved", "id": existing_save['id']}), 200
+        if existing_save:
+            return jsonify({"message": "Content already saved", "id": existing_save['id']}), 200
 
-    new_id = max([save.get('id', 0) for save in saves] + [0]) + 1
-    content['id'] = new_id
-    saves.append(content)
+        new_id = max([save.get('id', 0) for save in saves] + [0]) + 1
+        content['id'] = new_id
+        saves.append(content)
 
-    save_to_file(saves)
-    return jsonify({"message": "Content saved successfully", "id": new_id}), 200
+        save_to_file(saves)
+        return jsonify({"message": "Content saved successfully", "id": new_id}), 200
+    except Exception as e:
+        app.logger.error(f"Error in save_content: {str(e)}")
+        return jsonify({"error": "An internal server error occurred"}), 500
 
 @app.route('/saves', methods=['GET'])
 def get_saves():
@@ -346,10 +350,10 @@ def index():
 
 def load_saves() -> List[Dict]:
     """Load saved contents from file."""
-    if os.path.exists(SAVES_FILE):
-        with open(SAVES_FILE) as f:
-            return json.load(f)
-    return []
+    if not os.path.exists(SAVES_FILE):
+        save_to_file([])
+    with open(SAVES_FILE, 'r') as f:
+        return json.load(f)
 
 def save_to_file(saves: List[Dict]):
     """Save contents to file."""
