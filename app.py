@@ -12,7 +12,7 @@ async def launch_web_ui(update: Update, context: CallbackContext) -> None:
     )
 
     keyboard = [
-        [InlineKeyboardButton("Launch SaveIt Parser", web_app=WebAppInfo(url="https://mini-bookmark-telegram.vercel.app/"))]
+        [InlineKeyboardButton("Launch SaveIt Parser", web_app=WebAppInfo(url="https://mini-bookmark-telegram-toms-projects-04b11994.vercel.app/"))]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
