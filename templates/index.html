@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>URL Parser</title>
+    <title>SaveIt</title>
     <link rel="stylesheet" href="static/css/styles.css"/>
     <script src="static/js/script.js"></script>
   </head>
@@ -12,7 +12,10 @@
       <div id="input-container">
         <form id="url-form">
           <input type="url" id="url-input" placeholder="Enter URL to parse" required />
-          <button type="submit">Parse</button>
+          <div class="button-container">
+            <button type="submit" class="primary-button">Parse</button>
+            <button type="button" id="saves-button" class="secondary-button">Saves</button>
+          </div>
         </form>
       </div>
       <div id="loading" style="display: none;">
