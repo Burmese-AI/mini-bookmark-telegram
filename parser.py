@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import re
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
@@ -9,6 +10,8 @@ from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 from flask import Flask, jsonify, render_template, request
 from ratelimit import limits, sleep_and_retry
+
+from user_agents import USER_AGENTS
 
 app = Flask(__name__)
 
@@ -23,10 +26,16 @@ def fetch_page(url: str) -> Optional[BeautifulSoup]:
     Fetch and parse a web page with rate limiting.
     """
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': random.choice(USER_AGENTS),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
     }
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         return BeautifulSoup(response.text, 'html.parser')
     except requests.exceptions.RequestException:
@@ -55,26 +64,39 @@ def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
     return main_content
 
 # Content extraction functions
-def extract_content(main_content: BeautifulSoup) -> List[Dict]:
+def extract_content(main_content: BeautifulSoup, base_url: str) -> List[Dict]:
     """Extract content from the main content area."""
     content = []
-    for tag in main_content.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'strong']):
+    for tag in main_content.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre']):
         if tag.name == 'blockquote':
-            blockquote_content = extract_blockquote_content(tag)
+            blockquote_content = extract_blockquote_content(tag, base_url)
             if blockquote_content:
                 content.append(blockquote_content)
         elif tag.name == 'pre':
             content.append(extract_pre_content(tag))
-        elif tag.name == 'strong':
-            content.append({'tag': 'strong', 'text': tag.get_text(strip=True)})
-        else:
-            text = tag.get_text(strip=True)
-            if text:
-                content.append({'tag': tag.name, 'text': text})
+        elif not tag.find_parent('blockquote'):
+            content.append(extract_tag_content(tag))
 
     content = filter_empty_headings(content)
-
     return content
+
+def extract_tag_content(tag: BeautifulSoup) -> Dict:
+    """Extract content from a tag, preserving inline elements."""
+    content = []
+    for child in tag.children:
+        if isinstance(child, str):
+            content.append({'tag': None, 'text': child.strip()})
+        elif child.name in ['strong', 'em', 'i', 'b']:
+            if content and content[-1]['text'] and content[-1]['text'][-1] != ' ':
+                content.append({'tag': None, 'text': ' '})
+            content.append({'tag': child.name, 'text': child.get_text(strip=True)})
+            content.append({'tag': None, 'text': ' '})
+    while content and content[0]['text'] == ' ':
+        content.pop(0)
+    while content and content[-1]['text'] == ' ':
+        content.pop()
+    
+    return {'tag': tag.name, 'text': content}
 
 def extract_text_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
     """Extract text content from a BeautifulSoup tag."""
@@ -134,22 +156,16 @@ def extract_list_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[D
                   if li.get_text(strip=True) and li.get_text(strip=True) not in blockquote_text and not li.find('a')]
     return {'tag': tag.name, 'text': list_items} if list_items else None
 
-def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], List[Dict]]:
-    """Extract blockquote content from a BeautifulSoup tag."""
+def extract_blockquote_content(tag: BeautifulSoup, base_url: str) -> Optional[Dict]:
+    """
+    Extract blockquote content from a BeautifulSoup tag.
+    """
     blockquote_content = []
-    blockquote_text = set()
-    base_url = ''
-
     for child in tag.children:
-        if child.name == 'p':
-            p_content, _ = extract_paragraph_content(child, blockquote_text, base_url, is_blockquote=True)
-            if p_content:
-                blockquote_content.append(p_content)
-        elif child.name == 'strong':
-            strong_content = extract_strong_content(child, blockquote_text)
-            if strong_content:
-                blockquote_content.append(strong_content)
-                blockquote_text.add(strong_content['text'])
+        if child.name in ['p', 'strong', 'em', 'i', 'b']:
+            content = extract_tag_content(child)
+            if content['text']:
+                blockquote_content.append(content)
 
     return {'tag': 'blockquote', 'text': blockquote_content} if blockquote_content else None
 
@@ -320,7 +336,7 @@ def parse_url(url: str, depth: int = 1) -> Dict:
                 print(f"Failed to find main content for: {url}")
                 break
 
-            content = extract_content(main_content)
+            content = extract_content(main_content, url)
             metadata = extract_metadata(soup)
 
             # Get the text content for classification

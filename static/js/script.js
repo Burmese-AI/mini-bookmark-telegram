@@ -348,24 +348,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (item.tag === 'pre') return renderPreContent(item);
             if (item.tag === 'blockquote') return renderBlockquoteContent(item);
-            if (typeof item.text === 'string') return `<${item.tag}>${escapeHtml(item.text)}</${item.tag}>`;
-            if (Array.isArray(item.text)) return `<${item.tag}>${renderContent(item.text)}</${item.tag}>`;
-            if (item.text && typeof item.text === 'object' && item.text.text) return `<${item.tag}>${escapeHtml(item.text.text)}</${item.tag}>`;
-            return '';
+            
+            return renderTag(item);
         }).join('\n\n');
+    }
+
+    function renderTag(item) {
+        if (Array.isArray(item.text)) {
+            const innerContent = item.text.map(innerItem => {
+                if (innerItem.tag) {
+                    return `<${innerItem.tag}>${escapeHtml(innerItem.text)}</${innerItem.tag}>`;
+                }
+                return escapeHtml(innerItem.text);
+            }).join('');
+            return `<${item.tag}>${innerContent}</${item.tag}>`;
+        }
+        
+        return `<${item.tag}>${escapeHtml(item.text)}</${item.tag}>`;
     }
 
     function renderBlockquoteContent(item) {
         if (!Array.isArray(item.text)) return `<blockquote>${escapeHtml(item.text)}</blockquote>`;
         
-        let blockquoteContent = item.text.map(innerItem => {
-            if (typeof innerItem === 'string') return `<p>${escapeHtml(innerItem)}</p>`;
-            if (innerItem.tag === 'p') return renderContent([innerItem]);
-            if (innerItem.tag === 'br') return '<br>';
-            if (innerItem.tag === null) return escapeHtml(innerItem.text);
-            return `<${innerItem.tag}>${escapeHtml(innerItem.text)}</${innerItem.tag}>`;
-        }).join('');
-        
+        const blockquoteContent = item.text.map(innerItem => renderTag(innerItem)).join('');
         return `<blockquote>${blockquoteContent}</blockquote>`;
     }
 
