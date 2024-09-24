@@ -60,7 +60,9 @@ def extract_content(main_content: BeautifulSoup) -> List[Dict]:
     content = []
     for tag in main_content.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'strong']):
         if tag.name == 'blockquote':
-            content.append({'tag': 'blockquote', 'text': extract_blockquote_content(tag)})
+            blockquote_content = extract_blockquote_content(tag)
+            if blockquote_content:
+                content.append(blockquote_content)
         elif tag.name == 'pre':
             content.append(extract_pre_content(tag))
         elif tag.name == 'strong':
@@ -135,19 +137,21 @@ def extract_list_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[D
 def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], List[Dict]]:
     """Extract blockquote content from a BeautifulSoup tag."""
     blockquote_content = []
-    links = []
+    blockquote_text = set()
+    base_url = ''
+
     for child in tag.children:
         if child.name == 'p':
-            p_content, p_links = extract_paragraph_content(child, blockquote_text, base_url, is_blockquote=True)
+            p_content, _ = extract_paragraph_content(child, blockquote_text, base_url, is_blockquote=True)
             if p_content:
                 blockquote_content.append(p_content)
-            links.extend(p_links)
         elif child.name == 'strong':
             strong_content = extract_strong_content(child, blockquote_text)
             if strong_content:
                 blockquote_content.append(strong_content)
                 blockquote_text.add(strong_content['text'])
-    return ({'tag': 'blockquote', 'text': blockquote_content}, links) if blockquote_content else (None, links)
+
+    return {'tag': 'blockquote', 'text': blockquote_content} if blockquote_content else None
 
 def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url: str, is_blockquote: bool = False) -> Tuple[Optional[Dict], List[Dict]]:
     """Extract paragraph content from a BeautifulSoup tag."""
