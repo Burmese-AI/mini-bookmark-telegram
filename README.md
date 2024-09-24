@@ -7,7 +7,9 @@ Mini Bookmark Telegram is a web application that allows users to save and manage
 - Parse and extract contents using the Telegram bot [@saveitPro_bot](https://t.me/saveitPro_bot)
 - Save parsed contents for later reference
 - Delete saved contents when no longer needed
+- Adjustable depth option for content extraction
 - Web interface for easy bookmark management
+- Optimized for extracting articles from medium.com
 
 ## Technologies Used
 
@@ -41,3 +43,13 @@ Mini Bookmark Telegram is a web application that allows users to save and manage
    ```
    python parser.py
    ```
+
+6. In a separate terminal, run the Telegram bot:
+   ```
+   python app.py
+   ```
+
+## Future Improvements
+
+- Enhancing the content extraction algorithm for more accurate and comprehensive results
+- Implementing advanced parsing techniques to better handle various website structures
