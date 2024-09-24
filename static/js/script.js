@@ -1,18 +1,31 @@
-let currentContent = null;
-let currentUrl = null;
-let inputContainer, loadingDiv, resultDiv;
-let displayResult;
-
-const API_ENDPOINTS = {
-    SAVES: '/saves',
-    PARSE: '/parse',
-    SAVE: '/save',
-    REMOVE: (id) => `/remove/${id}`
-};
-
-let showToast;
-
 document.addEventListener('DOMContentLoaded', () => {
+    // Constants and global variables
+    const API_ENDPOINTS = {
+        SAVES: '/saves',
+        PARSE: '/parse',
+        SAVE: '/save',
+        REMOVE: (id) => `/remove/${id}`
+    };
+
+    let currentContent = null;
+    let currentUrl = null;
+    let inputContainer, loadingDiv, resultDiv;
+
+    // DOM elements
+    const urlForm = document.getElementById('url-form');
+    const urlInput = document.getElementById('url-input');
+    const savesButton = document.getElementById('saves-button');
+    inputContainer = document.getElementById('input-container');
+    loadingDiv = document.getElementById('loading');
+    resultDiv = document.getElementById('result');
+
+    // Event listeners
+    urlForm.addEventListener('submit', handleFormSubmit);
+    savesButton.addEventListener('click', showSaves);
+
+    // Toast functionality
+    const toastContainer = createToastContainer();
+
     function createToastContainer() {
         const container = document.createElement('div');
         container.className = 'toast-container';
@@ -20,9 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return container;
     }
 
-    const toastContainer = createToastContainer();
-
-    showToast = function(message, type = 'success', duration = 3000) {
+    function showToast(message, type = 'success', duration = 3000) {
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
         
@@ -35,11 +46,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         toast.appendChild(text);
         toast.appendChild(progress);
-        
         toastContainer.appendChild(toast);
         
         toast.offsetHeight;
-        
         toast.classList.add('show');
         
         setTimeout(() => removeToast(toast), duration);
@@ -52,23 +61,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 400);
     }
 
-    const urlForm = document.getElementById('url-form');
-    const urlInput = document.getElementById('url-input');
-    inputContainer = document.getElementById('input-container');
-    loadingDiv = document.getElementById('loading');
-    resultDiv = document.getElementById('result');
-    const savesButton = document.getElementById('saves-button');
-
-    urlForm.addEventListener('submit', async (e) => {
+    // Main functionality
+    async function handleFormSubmit(e) {
         e.preventDefault();
         const url = urlInput.value;
         await fetchAndDisplayContent(url);
-    });
-
-    savesButton.addEventListener('click', showSaves);
+    }
 
     async function fetchAndDisplayContent(url) {
         currentUrl = url;
+        const depthSelect = document.getElementById('depth-select');
+        const depth = depthSelect.value;
+
         inputContainer.style.display = 'none';
         loadingDiv.style.display = 'block';
         resultDiv.style.display = 'none';
@@ -77,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(API_ENDPOINTS.PARSE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url }),
+                body: JSON.stringify({ url, depth }),
             });
 
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
@@ -85,50 +89,70 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
 
             loadingDiv.style.display = 'none';
-            resultDiv.style.display = 'block';
 
             if (data.error) {
-                resultDiv.innerHTML = `<p class="error">${data.error}</p>`;
-            } else {
+                showToast(data.error, 'error');
+                goBack();
+            } else if (data.pages && data.pages.length > 0) {
+                resultDiv.style.display = 'block';
                 displayResult(data);
+            } else {
+                showToast('Failed to extract content from the page.', 'error');
+                goBack();
             }
         } catch (error) {
             loadingDiv.style.display = 'none';
-            resultDiv.style.display = 'block';
-            resultDiv.innerHTML = `<p class="error">An error occurred: ${error.message}</p>`;
+            showToast(`An error occurred: ${error.message}`, 'error');
+            goBack();
         }
     }
 
-    displayResult = function(data) {
+    function displayResult(data) {
         let html = '<div class="article-meta">';
         
-        if (data.url) html += `<p><strong>URL:</strong> ${escapeHtml(data.url)}</p>`;
-        if (data.type) html += `<p><strong>Type:</strong> ${escapeHtml(data.type)}</p>`;
-        
-        if (data.metadata && data.metadata.author) {
-            const author = data.metadata.author;
-            const authorName = author.name ? escapeHtml(author.name) : null;
-            const authorUrl = author.url || null;
+        // Metadata display
+        if (data.pages && data.pages.length > 0) {
+            const firstPage = data.pages[0];
+            
+            if (firstPage.content_type) html += `<p><strong>Content Type:</strong> ${escapeHtml(firstPage.content_type)}</p>`;
+            
+            if (firstPage.metadata) {
+                if (firstPage.metadata.author) {
+                    const author = firstPage.metadata.author;
+                    const authorName = author.name ? escapeHtml(author.name) : null;
+                    const authorUrl = author.url || null;
 
-            if (authorName && authorUrl) {
-                html += `<p><strong>Author:</strong> <a href="${escapeHtml(authorUrl)}" target="_blank" class="author-link">${authorName}</a></p>`;
+                    if (authorName && authorUrl) {
+                        html += `<p><strong>Author:</strong> <a href="${escapeHtml(authorUrl)}" target="_blank" class="author-link">${authorName}</a></p>`;
+                    } else if (authorName) {
+                        html += `<p><strong>Author:</strong> ${authorName}</p>`;
+                    }
+                }
+                
+                if (firstPage.metadata.publication_date) {
+                    html += `<p><strong>Publication Date:</strong> ${escapeHtml(firstPage.metadata.publication_date)}</p>`;
+                }
             }
-        }
-        
-        if (data.metadata && data.metadata.publication_date) {
-            html += `<p><strong>Publication Date:</strong> ${escapeHtml(data.metadata.publication_date)}</p>`;
         }
         
         html += '</div>';
 
-        if (data.content && Array.isArray(data.content)) {
-            const titleItem = data.content.find(item => item.tag === 'h1' || item.tag === 'h2');
-            if (titleItem) html += `<h1>${escapeHtml(titleItem.text)}</h1>`;
-            html += '<div class="article-content">';
-            html += renderContent(data.content);
-            html += '</div>';
+        // Display content from all pages
+        if (data.pages && data.pages.length > 0) {
+            data.pages.forEach((page, index) => {
+                if (data.pages.length > 1) {
+                    html += `<h2 class="page-heading">Page ${index + 1}</h2>`;
+                }
+                if (page.content && Array.isArray(page.content)) {
+                    const titleItem = page.content.find(item => item.tag === 'h1' || item.tag === 'h2');
+                    html += '<div class="article-content">';
+                    html += renderContent(page.content);
+                    html += '</div>';
+                }
+            });
         }
 
+        // Display all links together
         if (data.links && data.links.length > 0) {
             html += '<div class="article-links">';
             html += '<h3>Related Links:</h3>';
@@ -169,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         currentContent = data;
-    };
+    }
 
     async function showSaves() {
         try {
@@ -312,8 +336,10 @@ document.addEventListener('DOMContentLoaded', () => {
         inputContainer.style.display = 'block';
         resultDiv.style.display = 'none';
         resultDiv.innerHTML = '';
+        urlInput.value = '';
     }
 
+    // Content rendering functions
     function renderContent(content) {
         if (!Array.isArray(content)) return '<p>Error: Unable to render content</p>';
 
@@ -360,11 +386,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (unsafe === null || unsafe === undefined) return '';
         if (typeof unsafe !== 'string') unsafe = String(unsafe);
         return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     function addRemoveButton(id) {
@@ -386,3 +412,4 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+

@@ -19,7 +19,9 @@ SAVES_FILE = '/tmp/saves.json'
 @sleep_and_retry
 @limits(calls=CALLS, period=RATE_LIMIT)
 def fetch_page(url: str) -> Optional[BeautifulSoup]:
-    """Fetch and parse a web page with rate limiting."""
+    """
+    Fetch and parse a web page with rate limiting.
+    """
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -31,7 +33,9 @@ def fetch_page(url: str) -> Optional[BeautifulSoup]:
         return None
 
 def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
-    """Identify and extract the main content from a parsed web page."""
+    """
+    Identify and extract the main content from a parsed web page.
+    """
     for element in soup.find_all(['nav', 'header', 'footer', 'aside']):
         element.decompose()
 
@@ -50,26 +54,60 @@ def find_main_content(soup: BeautifulSoup) -> Optional[BeautifulSoup]:
 
     return main_content
 
+# Content extraction functions
+def extract_content(main_content: BeautifulSoup) -> List[Dict]:
+    """Extract content from the main content area."""
+    content = []
+    for tag in main_content.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'strong']):
+        if tag.name == 'blockquote':
+            content.append({'tag': 'blockquote', 'text': extract_blockquote_content(tag)})
+        elif tag.name == 'pre':
+            content.append(extract_pre_content(tag))
+        elif tag.name == 'strong':
+            content.append({'tag': 'strong', 'text': tag.get_text(strip=True)})
+        else:
+            text = tag.get_text(strip=True)
+            if text:
+                content.append({'tag': tag.name, 'text': text})
+
+    content = filter_empty_headings(content)
+
+    return content
+
 def extract_text_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
+    """Extract text content from a BeautifulSoup tag."""
     text = tag.get_text(strip=True)
     return {'tag': tag.name, 'text': text} if text and text not in blockquote_text else None
 
 def extract_link_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """Extract link content from a BeautifulSoup tag."""
     text = tag.get_text(strip=True)
-    ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe']
+    href = urljoin(base_url, tag.get('href', ''))
+    ignored_terms = [
+        'sign up', 'sign in', 'follow', 'login', 'register', 'subscribe',
+        'next', 'previous', 'older', 'newer', 'back', 'forward',
+        'first', 'last', 'page', 'comment', 'reply', 'edit',
+        '« previous', 'next »', '<<', '>>', '«', '»',
+        'terms', 'privacy', 'cookie', 'about us', 'contact',
+        'rss', 'feed', 'archive', 'category', 'tag'
+    ]
 
-    if text.lower() not in blockquote_text and not any(term in text.lower() for term in ignored_terms):
-        href = urljoin(base_url, tag.get('href')) if tag.get('href') else None
-        content = {'tag': 'a', 'text': text, 'href': href}
-        link = {'text': text, 'href': href}
-        return content, link
+    if (text.lower() not in blockquote_text and
+        not any(term in text.lower() for term in ignored_terms) and
+        not text.strip().isdigit() and
+        href.startswith('http') and
+        len(text.strip()) > 1 and
+        not re.match(r'^(\d+|(\d+\s+comments?))$', text.strip(), re.IGNORECASE)):
+        return {'tag': 'a', 'text': text, 'href': href}, {'text': text, 'href': href}
     return None, None
 
 def extract_strong_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
+    """Extract strong content from a BeautifulSoup tag."""
     text = tag.get_text(strip=True)
     return {'tag': 'strong', 'text': text} if text not in blockquote_text else None
 
 def extract_pre_content(tag: BeautifulSoup) -> Dict:
+    """Extract pre content from a BeautifulSoup tag."""
     pre_content = []
     for child in tag.children:
         if isinstance(child, str):
@@ -89,11 +127,13 @@ def extract_pre_content(tag: BeautifulSoup) -> Dict:
     return {'tag': 'pre', 'text': pre_content}
 
 def extract_list_content(tag: BeautifulSoup, blockquote_text: set) -> Optional[Dict]:
+    """Extract list content from a BeautifulSoup tag."""
     list_items = [li.get_text(strip=True) for li in tag.find_all('li', recursive=False)
                   if li.get_text(strip=True) and li.get_text(strip=True) not in blockquote_text and not li.find('a')]
     return {'tag': tag.name, 'text': list_items} if list_items else None
 
 def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_url: str) -> Tuple[Optional[Dict], List[Dict]]:
+    """Extract blockquote content from a BeautifulSoup tag."""
     blockquote_content = []
     links = []
     for child in tag.children:
@@ -110,6 +150,7 @@ def extract_blockquote_content(tag: BeautifulSoup, blockquote_text: set, base_ur
     return ({'tag': 'blockquote', 'text': blockquote_content}, links) if blockquote_content else (None, links)
 
 def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url: str, is_blockquote: bool = False) -> Tuple[Optional[Dict], List[Dict]]:
+    """Extract paragraph content from a BeautifulSoup tag."""
     p_content = []
     links = []
     for child in tag.children:
@@ -134,7 +175,30 @@ def extract_paragraph_content(tag: BeautifulSoup, blockquote_text: set, base_url
                     blockquote_text.add(strong_content['text'])
     return ({'tag': 'p', 'text': p_content}, links) if p_content else (None, links)
 
+def extract_links(soup: BeautifulSoup, base_url: str) -> List[Dict]:
+    """Extract links from the soup object."""
+    links = []
+    ignored_terms = [
+        'previous', 'next', 'older', 'newer', '«', '»',
+        'first', 'last', 'page', 'comment', 'reply'
+    ]
+    for a_tag in soup.find_all('a', href=True):
+        href = urljoin(base_url, a_tag['href'])
+        text = a_tag.get_text(strip=True)
+
+        # Check if the link text contains version numbers or dates
+        if re.search(r'\b\d+\.\d+(\.\d+)?\b', text) or re.search(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b', text):
+            continue
+
+        if (href.startswith('http') and text and
+            not any(term in text.lower() for term in ignored_terms) and
+            not text.strip().isdigit() and
+            not re.match(r'^(\d+|(\d+\s+comments?))$', text.strip(), re.IGNORECASE)):
+            links.append({'text': text, 'href': href})
+    return links
+
 def filter_empty_headings(content: List[Dict]) -> List[Dict]:
+    """Remove empty headings from the content."""
     filtered_content = []
     for i, item in enumerate(content):
         if item['tag'].startswith('h'):
@@ -143,38 +207,26 @@ def filter_empty_headings(content: List[Dict]) -> List[Dict]:
         filtered_content.append(item)
     return filtered_content
 
-def extract_content(soup: BeautifulSoup, base_url: str) -> Tuple[List[Dict], List[Dict]]:
-    content = []
-    links = []
-    blockquote_text = set()
-    main_content = find_main_content(soup) or soup.body or soup
+def find_next_page(soup: BeautifulSoup, base_url: str) -> Optional[str]:
+    """Find the URL of the next page, if it exists."""
+    next_link = soup.find('a', text=re.compile(r'next|older|»', re.I))
+    if next_link and 'href' in next_link.attrs:
+        return urljoin(base_url, next_link['href'])
 
-    for tag in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'pre', 'ul', 'ol', 'blockquote']):
-        if tag.name == 'blockquote':
-            blockquote_content, blockquote_links = extract_blockquote_content(tag, blockquote_text, base_url)
-            if blockquote_content:
-                content.append(blockquote_content)
-            links.extend(blockquote_links)
-        elif tag.name.startswith('h'):
-            heading_content = extract_text_content(tag, blockquote_text)
-            if heading_content:
-                content.append(heading_content)
-        elif tag.name == 'p':
-            p_content, p_links = extract_paragraph_content(tag, blockquote_text, base_url)
-            if p_content:
-                content.append(p_content)
-            links.extend(p_links)
-        elif tag.name == 'pre':
-            content.append(extract_pre_content(tag))
-        elif tag.name in ['ul', 'ol']:
-            list_content = extract_list_content(tag, blockquote_text)
-            if list_content:
-                content.append(list_content)
+    page_links = soup.find_all('a', href=re.compile(r'\?page=\d+'))
+    if page_links:
+        current_page = int(re.search(r'\?page=(\d+)', soup.url).group(1)) if '?page=' in soup.url else 1
+        next_page_link = next((link for link in page_links if int(re.search(r'\?page=(\d+)', link['href']).group(1)) == current_page + 1), None)
+        if next_page_link:
+            return urljoin(base_url, next_page_link['href'])
 
-    filtered_content = filter_empty_headings(content)
-    return filtered_content, links
+    return None
 
+# Content classification function
 def classify_content(url: str, content: str, metadata: dict) -> str:
+    """
+    Classify the type of content based on URL, content, and metadata.
+    """
     domain = urlparse(url).netloc.lower()
     path = urlparse(url).path.lower()
     lower_content = content.lower()[:1000]
@@ -197,7 +249,9 @@ def classify_content(url: str, content: str, metadata: dict) -> str:
 
     return "Article"
 
+# Metadata extraction functions
 def extract_date(soup: BeautifulSoup) -> Optional[str]:
+    """Extract the publication date from the soup object."""
     text = soup.get_text()
     date_patterns = [
         r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b',
@@ -218,6 +272,7 @@ def extract_date(soup: BeautifulSoup) -> Optional[str]:
     return None
 
 def extract_author(soup: BeautifulSoup) -> Optional[Dict]:
+    """Extract the author information from the soup object."""
     author_meta = soup.find('meta', attrs={'name': 'author'})
     author_url_meta = soup.find('meta', attrs={'property': 'article:author'})
 
@@ -230,46 +285,77 @@ def extract_author(soup: BeautifulSoup) -> Optional[Dict]:
     return author_info if author_info else None
 
 def extract_metadata(soup: BeautifulSoup) -> Dict:
+    """Extract metadata from the soup object."""
     return {
         'publication_date': extract_date(soup),
         'author': extract_author(soup)
     }
 
-def parse_url(url: str) -> Dict:
+# Main parsing function
+def parse_url(url: str, depth: int = 1) -> Dict:
+    """
+    Parse a URL and its linked pages up to the specified depth.
+    """
     try:
-        soup = fetch_page(url)
-        if soup is None:
-            return {"error": "Failed to fetch the page", "content": []}
+        pages = []
+        all_links = []
+        visited = set()
 
-        base_url = '/'.join(url.split('/')[:3])
-        content_text, additional_links = extract_content(soup, base_url)
+        for current_depth in range(depth):
+            if url in visited:
+                break
+            visited.add(url)
 
-        if not content_text:
-            return {"error": "No content could be extracted from this page", "content": []}
+            soup = fetch_page(url)
+            if not soup:
+                print(f"Failed to fetch page: {url}")
+                break
 
-        metadata = extract_metadata(soup)
-        content_type = classify_content(url, ' '.join([item['text'] for item in content_text if isinstance(item['text'], str)]), metadata)
+            main_content = find_main_content(soup)
+            if not main_content:
+                print(f"Failed to find main content for: {url}")
+                break
 
-        ignored_terms = ['sign up', 'sign in', 'follow', 'login', 'register', 'subscribe', 'open in app']
-        all_links = soup.find_all('a', href=True)
-        filtered_links = [
-            {'text': a.get_text(strip=True), 'href': urljoin(base_url, a['href'])}
-            for a in all_links
-            if a.get_text(strip=True) and not any(term in a.get_text(strip=True).lower() for term in ignored_terms)
-        ]
+            content = extract_content(main_content)
+            metadata = extract_metadata(soup)
 
-        filtered_links.extend(additional_links)
-        unique_links = list({link['href']: link for link in filtered_links}.values())[:10]
+            # Get the text content for classification
+            text_content = ' '.join([item['text'] for item in content if isinstance(item.get('text'), str)])
 
+            # Classify the content
+            content_type = classify_content(url, text_content, metadata)
+
+            # Extract links from the entire page
+            links = extract_links(soup, url)
+
+            pages.append({
+                "url": url,
+                "content": content,
+                "metadata": metadata,
+                "content_type": content_type,
+                "links": links[:10]
+            })
+
+            all_links.extend(links)
+
+            if current_depth == depth - 1:
+                break
+
+            next_page = find_next_page(soup, url)
+            if not next_page:
+                break
+            url = next_page
+
+        unique_links = list({link['href']: link for link in all_links}.values())
         return {
-            "content": content_text,
-            "type": content_type,
-            "metadata": metadata,
-            "links": unique_links
+            "pages": pages,
+            "links": unique_links[:10 * depth]
         }
     except Exception as e:
-        return {"error": f"An error occurred while parsing the URL: {str(e)}", "content": []}
+        print(f"Error parsing URL: {str(e)}")
+        return {"error": f"An error occurred while parsing the URL: {str(e)}"}
 
+# Flask routes
 @app.route('/save', methods=['POST'])
 def save_content():
     """Save parsed content to a file."""
@@ -332,21 +418,23 @@ def remove_all_content():
 
 @app.route('/parse', methods=['POST'])
 def parse():
-    """Parse a given URL and return its content."""
-    url = request.json.get('url')
+    """Parse a URL and return the result."""
+    data = request.json
+    url = data.get('url')
+    depth = int(data.get('depth', 1))
+
     if not url:
-        return jsonify({"error": "URL is required", "content": []}), 400
-    try:
-        result = parse_url(url)
-        return jsonify(result)
-    except Exception as e:
-        return jsonify({"error": str(e), "content": []}), 500
+        return jsonify({"error": "URL is required"}), 400
+
+    result = parse_url(url, depth)
+    return jsonify(result)
 
 @app.route('/')
 def index():
     """Render the main page."""
     return render_template('index.html')
 
+# File operations
 def load_saves() -> List[Dict]:
     """Load saved contents from file."""
     if not os.path.exists(SAVES_FILE):
