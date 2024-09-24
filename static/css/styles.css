@@ -48,7 +48,6 @@ input[type="url"]:focus {
 /* Depth option styles */
 #depth-select {
   width: 15%;
-  margin-bottom: 10px;
   padding: 5px 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
